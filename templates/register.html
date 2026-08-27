@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Register - MiniMart{% endblock %}
+{% block content %}
+<h1>Register</h1><form method="post" class="card card-body" style="max-width: 28rem">
+  <label class="form-label">Username</label><input class="form-control mb-3" name="username" required>
+  <label class="form-label">Password</label><input class="form-control mb-3" type="password" name="password" required>
+  <button class="btn btn-primary">Create account</button>
+</form>
+{% endblock %}

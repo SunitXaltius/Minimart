@@ -1,0 +1,65 @@
+# Environment variables and local configuration
+.env
+.env.*
+!.env.example
+.flaskenv
+config.local.py
+
+# Secrets and credentials
+secrets/
+credentials*.json
+*.pem
+*.key
+*.p12
+*.pfx
+
+# SQLite databases
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.db-shm
+*.db-wal
+
+# Python-generated files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Test and tool caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Build output
+build/
+dist/
+*.egg-info/
+
+# Flask local data
+instance/
+
+# Logs
+*.log
+logs/
+
+# Editor and operating-system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+myvenv/
+.env
+*.db
+__pycache__/
