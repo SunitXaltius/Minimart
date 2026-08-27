@@ -1,0 +1,38 @@
+# Give this workflow a clear name in GitHub's Actions tab.
+name: MiniMart CI
+
+# Run the workflow for pushes and pull requests targeting the main branch.
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+# Define the automated work GitHub will perform.
+jobs:
+  # Create one job whose only responsibility is running the pytest suite.
+  test:
+    # Run the job on a temporary Ubuntu Linux computer provided by GitHub.
+    runs-on: ubuntu-latest
+
+    # Perform these steps in order on the temporary computer.
+    steps:
+      # Download the MiniMart repository onto the temporary computer.
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      # Install Python 3.10; change this number if python --version shows another version.
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      # Install the project packages listed in requirements.txt.
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      # Run the tests; pytest returns an error code that makes this job fail if any test fails.
+      - name: Run pytest
+        run: pytest
