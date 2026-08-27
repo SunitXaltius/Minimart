@@ -7,18 +7,45 @@ environment. Rate limiting and CSRF protection remain documented limitations.
 import sqlite3
 from functools import wraps
 
-from flask import Flask, flash, redirect, render_template, request, session, url_for
+from flask import Flask, current_app, flash, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from config import load_config
 
 
-app = Flask(__name__)
-app.config.update(load_config())
+def create_app(test_config=None):
+    """Create and configure a MiniMart Flask application."""
+    app = Flask(__name__)
+
+    if test_config is None:
+        app.config.update(load_config())
+    else:
+        app.config.update(test_config)
+
+    app.add_url_rule("/", view_func=home)
+    app.add_url_rule("/search", view_func=search)
+    app.add_url_rule("/register", view_func=register, methods=["GET", "POST"])
+    app.add_url_rule("/login", view_func=login, methods=["GET", "POST"])
+    app.add_url_rule("/logout", view_func=logout)
+    app.add_url_rule(
+        "/cart/add/<int:product_id>",
+        view_func=add_to_cart,
+        methods=["POST"],
+    )
+    app.add_url_rule("/cart", view_func=cart)
+    app.add_url_rule("/checkout", view_func=checkout, methods=["GET", "POST"])
+    app.add_url_rule("/admin", view_func=admin)
+    app.add_url_rule(
+        "/admin/add",
+        view_func=admin_add,
+        methods=["GET", "POST"],
+    )
+
+    return app
 
 
 def get_db():
-    connection = sqlite3.connect(app.config["DATABASE"])
+    connection = sqlite3.connect(current_app.config["DATABASE"])
     connection.row_factory = sqlite3.Row
     return connection
 
@@ -92,7 +119,6 @@ def fetch_cart_products():
     return products
 
 
-@app.route("/")
 def home():
     connection = get_db()
     products = connection.execute("SELECT * FROM products ORDER BY id").fetchall()
@@ -100,7 +126,6 @@ def home():
     return render_template("index.html", products=products)
 
 
-@app.route("/search")
 def search():
     term = request.args.get("q", "")
     connection = get_db()
@@ -109,7 +134,6 @@ def search():
     return render_template("search.html", products=products, term=term)
 
 
-@app.route("/register", methods=["GET", "POST"])
 def register():
     if request.method == "POST":
         username = request.form.get("username", "").strip()
@@ -131,7 +155,6 @@ def register():
     return render_template("register.html")
 
 
-@app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
         username = request.form.get("username", "").strip()
@@ -147,13 +170,11 @@ def login():
     return render_template("login.html")
 
 
-@app.route("/logout")
 def logout():
     session.clear()
     return redirect(url_for("home"))
 
 
-@app.post("/cart/add/<int:product_id>")
 @login_required
 def add_to_cart(product_id):
     ids = session.get("cart", [])
@@ -162,14 +183,12 @@ def add_to_cart(product_id):
     return redirect(request.referrer or url_for("home"))
 
 
-@app.route("/cart")
 @login_required
 def cart():
     products = fetch_cart_products()
     return render_template("cart.html", products=products, total=sum(p["price"] for p in products))
 
 
-@app.route("/checkout", methods=["GET", "POST"])
 @login_required
 def checkout():
     products = fetch_cart_products()
@@ -187,7 +206,6 @@ def checkout():
     return render_template("checkout.html", count=len(products), total=total)
 
 
-@app.route("/admin")
 @admin_required
 def admin():
     connection = get_db()
@@ -196,7 +214,6 @@ def admin():
     return render_template("admin.html", products=products)
 
 
-@app.route("/admin/add", methods=["GET", "POST"])
 @admin_required
 def admin_add():
     if request.method == "POST":
@@ -222,5 +239,7 @@ def admin_add():
 
 
 if __name__ == "__main__":
-    init_db()
+    app = create_app()
+    with app.app_context():
+        init_db()
     app.run(debug=True)
