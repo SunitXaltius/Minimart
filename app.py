@@ -4,13 +4,69 @@ Passwords are hashed, routes enforce roles, and secrets are loaded from the
 environment. Rate limiting and CSRF protection remain documented limitations.
 """
 
+import logging
 import sqlite3
 from functools import wraps
+from pathlib import Path
 
 from flask import Flask, current_app, flash, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from config import load_config
+
+
+def configure_logging(app):
+    """Configure MiniMart logging for both the console and a local log file."""
+    level_name = str(app.config.get("LOG_LEVEL", "INFO")).upper()
+    log_level = getattr(logging, level_name, None)
+
+    if not isinstance(log_level, int):
+        raise RuntimeError(
+            "LOG_LEVEL must be DEBUG, INFO, WARNING, ERROR, or CRITICAL."
+        )
+
+    app_directory = Path(app.root_path).resolve()
+    log_directory = (app_directory / "logs").resolve()
+    configured_file = Path(app.config.get("LOG_FILE", "logs/app.log"))
+
+    if configured_file.is_absolute():
+        log_file = configured_file.resolve()
+    else:
+        log_file = (app_directory / configured_file).resolve()
+
+    try:
+        log_file.relative_to(log_directory)
+    except ValueError as error:
+        raise RuntimeError("LOG_FILE must point to a file under logs/.") from error
+
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+
+    formatter = logging.Formatter(
+        "%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+        datefmt="%Y-%m-%dT%H:%M:%S%z",
+    )
+
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(log_level)
+    console_handler.setFormatter(formatter)
+
+    file_handler = logging.FileHandler(log_file, encoding="utf-8")
+    file_handler.setLevel(log_level)
+    file_handler.setFormatter(formatter)
+
+    for existing_handler in app.logger.handlers[:]:
+        app.logger.removeHandler(existing_handler)
+        existing_handler.close()
+
+    app.logger.setLevel(log_level)
+    app.logger.propagate = False
+    app.logger.addHandler(console_handler)
+    app.logger.addHandler(file_handler)
+    app.logger.info(
+        "Logging configured level=%s file=%s",
+        level_name,
+        log_file.name,
+    )
 
 
 def create_app(test_config=None):
@@ -21,6 +77,8 @@ def create_app(test_config=None):
         app.config.update(load_config())
     else:
         app.config.update(test_config)
+
+    configure_logging(app)
 
     app.add_url_rule("/", view_func=home)
     app.add_url_rule("/search", view_func=search)
