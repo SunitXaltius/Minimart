@@ -1,0 +1,43 @@
+# MiniMart Launch Readiness
+
+## Current decision
+
+**Recommendation: Do not ship to production yet.**
+
+MiniMart has a defined test, monitoring, deployment and rollback approach, but the evidence pack still contains unresolved high-risk security items and unverified operational controls. Reassess the decision after the launch conditions at the end of this document are completed for one identified release commit.
+
+## Readiness summary
+
+| Section | What goes in it | Where the evidence lives |
+|---|---|---|
+| What MiniMart is | MiniMart is a small internal Flask catalogue and ordering application intended for a few hundred users. It uses SQLite for products, users and orders, with GitHub Actions for automated testing and a planned systemd/Gunicorn production service. | — |
+| Code quality | **Three principal problems found and fixed:**<br>1. Input was concatenated into SQL; reviewed login and search queries now use SQLite parameters.<br>2. Pages were assembled using Python HTML strings; output was moved to Jinja2 templates with normal auto-escaping.<br>3. Authentication was treated as authorization; `login_required` and `admin_required` now separate user access from administrator permission.<br><br>Important unresolved code issues include duplicate cart IDs being collapsed, nonexistent product IDs entering the session, non-finite prices and incomplete order records. | [`docs/code-review-notes.md`](code-review-notes.md) |
+| Security posture | **Fixed:** reviewed SQL injection paths, plaintext password storage, hardcoded Flask secret, missing administrator role enforcement and unsafe raw HTML construction.<br><br>**Known limitations:** production initialization can create accounts with publicly known passwords; CSRF protection and login rate limiting do not exist; session roles can become stale; password policy is weak; production cookie settings require verification; and direct execution still enables Flask debug mode.<br><br>These limitations matter because they allow credential guessing, forged state-changing requests, unsafe fresh deployments and possible misuse of privileged sessions. | [`docs/security-review.md`](security-review.md) |
+| Test coverage | **23 tests are expected to be collected:** 5 smoke, 10 authentication and 8 edge-case cases. The reported coverage is **80%**, but the number is not sufficient evidence of correctness.<br><br>The saved suite does not yet verify a complete successful checkout, valid administrator product creation, database-write failure handling, duplicate cart quantities, nonexistent products, CSRF, rate limiting or production environment loading. The release decision requires a passing CI record for the exact deployment commit, not only the expected count in this document. | [`docs/testing-notes.md`](testing-notes.md) |
+| Pipeline | GitHub Actions checks out the repository, installs Python 3.10, installs `requirements.txt` and runs `pytest` for pushes and pull requests targeting `main`.<br><br>The gate has caught a real test-setup failure: smoke tests requested a nonexistent `login_as` fixture, causing the pipeline to fail before the tests ran. A later setup issue also showed that logging configuration needed test-specific values.<br><br>Branch protection, required-review enforcement and proof that the deployed SHA is the SHA that passed CI are not yet evidenced. | [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) and [`docs/testing-notes.md`](testing-notes.md) |
+| Observability | Required key events cover registration, login success and failure, logout, administrator access denial, order placement and failure, administrator product creation, invalid submissions and unexpected exceptions.<br><br>**Wake-up alert 1:** 3 consecutive failed availability checks, one minute apart.<br>**Wake-up alert 2:** 3 order-write errors within 10 minutes, or a 100% checkout failure rate with at least 3 attempts.<br><br>The logging configuration exists, but launch evidence must show that every required route event is present once, contains safe context, contains no secret and feeds a working alert notification. | [`docs/monitoring.md`](monitoring.md) |
+| Deployment and rollback | Use one controlled restart of a systemd-managed Gunicorn service. Preserve the production SQLite database, take and verify a backup before database-impacting work, deploy the exact tested `main` commit and observe the release for 30 minutes.<br><br>Rollback uses the same availability and order-write thresholds shown above. The Deployment Owner has 5 minutes after an alert to decide, with rollback as the default when the release cannot be ruled out.<br><br>**Rehearsal result:** no completed rehearsal result is recorded in the evidence pack. The rollback commands, database backup, service recovery and post-rollback checks must therefore be treated as unproven. | [`docs/deployment-rollback.md`](deployment-rollback.md) |
+| Cost and ROI | Illustrative 12-month comparison: traditional build **SGD 12,000**; AI-assisted build, tools, review and maintenance reserve **SGD 9,000**; estimated net benefit **SGD 3,000**; estimated ROI **33.3%**.<br><br>The result assumes a 20-day traditional build, SGD 600 loaded daily rate, 5-day AI build, SGD 1,200 annual tool cost, 4 review/security days, 4 maintenance/rework days and equal scope and quality. The traditional estimate and future maintenance are highly sensitive assumptions, and no measured user-productivity benefit is included. | [`docs/cost-roi.md`](cost-roi.md) |
+| Recommendation | **Do not ship yet.** The current pack identifies high-risk controls that are still open and operational controls that have not been demonstrated. Once the conditions below are evidenced for one exact release SHA, MiniMart may be reconsidered for a controlled internal launch with a maintenance window and named owner. | This document and the six supporting documents |
+
+## Conditions required before reconsidering launch
+
+| Priority | Launch condition | Evidence required |
+|---|---|---|
+| Blocker | Remove publicly known seeded production credentials. | Production initialization no longer creates `admin/admin123` or `shopper/password1`; controlled administrator-creation record; authentication tests pass. |
+| Blocker | Add CSRF protection to state-changing actions. | Tests demonstrate rejection without a valid token and success with one for cart, checkout, logout and administrator changes. |
+| Blocker | Add proportionate login rate limiting. | Automated test and controlled demonstration show repeated failures are limited without blocking normal login. |
+| Blocker | Prove the release artifact. | One commit SHA linked to its passing CI run, security review version and deployment record. |
+| Blocker | Prove the core order path. | Successful-checkout test verifies user, total, stored order and cleared cart; database-failure test verifies no partial write and a safe error. |
+| Blocker | Verify logging and both alert paths. | Controlled actions produce the required safe events; each alert reaches the named responder when its exact threshold is crossed. |
+| Blocker | Rehearse rollback and database recovery. | Dated record containing release tag, start/end time, observed RTO, declared RPO, command corrections, successful service checks and a verified database restore in a non-production environment. |
+| Required | Enforce production execution through systemd/Gunicorn. | Service definition, active service status and evidence that the Flask development server/debugger is not exposed. |
+| Required | Verify production session and file protections. | Cookie-security configuration plus permissions for the environment file, SQLite database, backups and logs. |
+| Required | Close important data-quality defects. | Tests for non-finite prices, nonexistent product IDs and repeated cart quantities. |
+| Required | Confirm operational ownership. | Named Deployment Owner, backup decision-maker and contact path recorded in the runbook. |
+
+## Go/no-go rule
+
+The launch decision changes from **Do not ship** only when every blocker above is closed for the exact commit intended for production. A green pipeline alone is insufficient: the decision also requires a successful rollback rehearsal, tested alert delivery, removal of known credentials and demonstrated protection of the main checkout transaction.
+
+If the blockers are closed but required items remain, the only defensible decision is **Ship with conditions**, with named owners and dates for each accepted residual risk. If a blocker is reopened or the production commit differs from the reviewed commit, the decision returns to **Do not ship**.
